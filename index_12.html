@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>階段寸法プランナー</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Zen+Old+Mincho:wght@500;700;900&family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* ==== デザイントークン（色・余白などをここでまとめて管理） ==== */
+  :root{
+    --bg-cream:#f5f2e6;
+    --panel:#ffffff;
+    --panel-tint:#f4eee0;
+    --forest:#2f4a3c;
+    --forest-dim:rgba(47,74,60,0.22);
+    --text-main:#2a2a24;
+    --text-sub:#6e7a6e;
+    --clay:#a8703f;
+    --green:#4c8b63;
+    --red:#b4483c;
+    --radius:14px;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(circle at 15% 0%, rgba(47,74,60,0.06), transparent 45%),
+      var(--bg-cream);
+    color:var(--text-main);
+    font-family:"Noto Sans JP",sans-serif;
+    line-height:1.6;
+    padding:28px 16px 60px;
+  }
+
+  .wrap{max-width:1080px;margin:0 auto;}
+
+  /* ---- ヘッダー ---- */
+  header{margin-bottom:28px;}
+  .eyebrow{
+    font-family:"JetBrains Mono",monospace;
+    font-size:11px;
+    letter-spacing:0.22em;
+    color:var(--clay);
+    margin:0 0 8px;
+    text-transform:uppercase;
+  }
+  h1{
+    font-family:"Zen Old Mincho",serif;
+    font-weight:700;
+    font-size:clamp(26px,4.5vw,36px);
+    margin:0 0 10px;
+    letter-spacing:0.04em;
+  }
+  header p{
+    color:var(--text-sub);
+    margin:0;
+    font-size:14px;
+    max-width:640px;
+  }
+
+  /* ---- カード共通 ---- */
+  .card{
+    background:linear-gradient(180deg, var(--panel), var(--panel-tint));
+    border:1px solid rgba(47,74,60,0.14);
+    border-radius:var(--radius);
+    padding:20px;
+    box-shadow:0 2px 10px rgba(47,74,60,0.06);
+  }
+  .card h2{
+    font-family:"Noto Sans JP",sans-serif;
+    font-size:15px;
+    font-weight:700;
+    margin:0 0 16px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .card h2::before{
+    content:"";
+    width:6px;height:6px;border-radius:50%;
+    background:var(--clay);
+    display:inline-block;
+  }
+
+  /* ---- メイングリッド ---- */
+  .grid{
+    display:grid;
+    grid-template-columns:340px 1fr;
+    gap:18px;
+    align-items:start;
+  }
+  @media (max-width:800px){
+    .grid{grid-template-columns:1fr;}
+  }
+
+  /* ---- 入力欄 ---- */
+  .field{margin-bottom:18px;}
+  .field:last-child{margin-bottom:0;}
+  .field label{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    font-size:13px;
+    color:var(--text-sub);
+    margin-bottom:6px;
+  }
+  .field label .val{
+    font-family:"JetBrains Mono",monospace;
+    color:var(--forest);
+    font-size:14px;
+    font-weight:700;
+  }
+  .field input[type=number]{
+    width:100%;
+    background:rgba(47,74,60,0.06);
+    border:1px solid rgba(47,74,60,0.25);
+    color:var(--text-main);
+    font-family:"JetBrains Mono",monospace;
+    font-size:14px;
+    padding:8px 10px;
+    border-radius:8px;
+    margin-bottom:8px;
+  }
+  .field input[type=range]{
+    width:100%;
+    accent-color:var(--clay);
+    height:4px;
+  }
+  select{
+    width:100%;
+    background:rgba(47,74,60,0.06);
+    border:1px solid rgba(47,74,60,0.25);
+    color:var(--text-main);
+    font-family:"Noto Sans JP",sans-serif;
+    font-size:14px;
+    padding:9px 10px;
+    border-radius:8px;
+  }
+  select option{background:var(--panel);}
+
+  /* ---- 図面カード ---- */
+  .diagram-card{position:relative;overflow:hidden;}
+  svg.blueprint{width:100%;height:auto;display:block;}
+  .grid-pattern-line{stroke:var(--forest-dim);stroke-width:1;fill:none;}
+  .stair-fill{fill:rgba(47,74,60,0.10);}
+  .stair-line{fill:none;stroke:var(--forest);stroke-width:2.5;stroke-linejoin:round;}
+  .dim-line{stroke:var(--text-sub);stroke-width:1;}
+  .dim-ext{stroke:rgba(110,122,110,0.5);stroke-width:1;}
+  .dim-text{
+    fill:var(--text-sub);
+    font-family:"JetBrains Mono",monospace;
+    font-size:12px;
+  }
+  .floor-line{stroke:var(--forest);stroke-width:2;}
+  .hatch{stroke:var(--text-sub);stroke-width:1;opacity:0.55;}
+
+  /* ---- 結果ストリップ ---- */
+  .stats{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(120px,1fr));
+    gap:10px;
+    margin-top:18px;
+  }
+  .stat{
+    background:rgba(47,74,60,0.05);
+    border:1px solid rgba(47,74,60,0.15);
+    border-radius:10px;
+    padding:12px 14px;
+  }
+  .stat .label{font-size:11.5px;color:var(--text-sub);margin-bottom:4px;}
+  .stat .value{
+    font-family:"JetBrains Mono",monospace;
+    font-size:18px;
+    font-weight:700;
+    color:var(--text-main);
+  }
+  .stat .value small{font-size:12px;color:var(--text-sub);font-weight:400;}
+
+  .badge{
+    display:inline-flex;align-items:center;gap:6px;
+    padding:5px 12px;border-radius:999px;
+    font-size:13px;font-weight:700;
+    font-family:"Noto Sans JP",sans-serif;
+  }
+  .badge.ok{background:rgba(76,139,99,0.18);color:var(--green);}
+  .badge.ng{background:rgba(180,72,60,0.18);color:var(--red);}
+
+  /* ---- 一段の断面（勾配確認）ミニ図 ---- */
+  .mini-row{
+    display:grid;
+    grid-template-columns:180px 1fr;
+    gap:18px;
+    align-items:center;
+    margin-top:18px;
+  }
+  @media (max-width:800px){.mini-row{grid-template-columns:1fr;}}
+  .mini-svg-box{
+    background:rgba(47,74,60,0.05);
+    border:1px solid rgba(47,74,60,0.15);
+    border-radius:10px;
+    padding:8px;
+  }
+  .slope-line{stroke:var(--clay);stroke-width:2;}
+  .leg-line{stroke:var(--forest);stroke-width:2;}
+  .right-angle{stroke:var(--text-sub);stroke-width:1;fill:none;}
+  .arc-line{stroke:var(--clay);stroke-width:1.5;fill:none;}
+
+  /* ---- 適合判定テーブル ---- */
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{padding:9px 8px;text-align:center;border-bottom:1px solid rgba(47,74,60,0.12);}
+  th{color:var(--text-sub);font-weight:500;font-size:11.5px;text-align:center;}
+  td.name{text-align:left;color:var(--text-main);}
+  tr.selected{background:rgba(168,112,63,0.08);box-shadow:inset 3px 0 0 var(--clay);}
+  .mark-ok{color:var(--green);font-weight:700;}
+  .mark-ng{color:var(--red);font-weight:700;}
+
+  .ref-table td, .ref-table th{font-size:12.5px;padding:7px 8px;}
+
+  footer{
+    margin-top:22px;
+    font-size:12px;
+    color:var(--text-sub);
+    border-top:1px solid rgba(47,74,60,0.12);
+    padding-top:14px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Staircase Dimension Planner</p>
+    <h1>階段寸法プランナー</h1>
+    <p>階高・踏面・目安の蹴上を入力すると、段数と実際の蹴上を自動計算し、断面図と法令基準への適合をリアルタイムに確認できます。</p>
+  </header>
+
+  <div class="grid">
+
+    <!-- 入力パネル -->
+    <div class="card">
+      <h2>寸法を入力</h2>
+
+      <div class="field">
+        <label>階高（昇降する高さ） <span class="val" id="v-height">2800</span> mm</label>
+        <input type="number" id="in-height-n" value="2800" step="10">
+        <input type="range" id="in-height-r" min="2000" max="4500" step="10" value="2800">
+      </div>
+
+      <div class="field">
+        <label>踏面（ふみづら） <span class="val" id="v-tread">250</span> mm</label>
+        <input type="number" id="in-tread-n" value="250" step="5">
+        <input type="range" id="in-tread-r" min="150" max="350" step="5" value="250">
+      </div>
+
+      <div class="field">
+        <label>目安の蹴上（けあげ） <span class="val" id="v-riser">200</span> mm</label>
+        <input type="number" id="in-riser-n" value="200" step="5">
+        <input type="range" id="in-riser-r" min="120" max="230" step="5" value="200">
+      </div>
+
+      <div class="field">
+        <label>階段の幅 <span class="val" id="v-width">750</span> mm</label>
+        <input type="number" id="in-width-n" value="750" step="10">
+        <input type="range" id="in-width-r" min="600" max="1600" step="10" value="750">
+      </div>
+
+      <div class="field">
+        <label>用途区分（判定の基準に使用）</label>
+        <select id="in-category">
+          <option value="0">小学校の児童用</option>
+          <option value="1">中学・高校生徒用／劇場等／物販1500㎡超</option>
+          <option value="2">200㎡超の居室階／地階等100㎡超</option>
+          <option value="3">上記以外・住宅以外</option>
+          <option value="4" selected>住宅（共同住宅の共用階段を除く）</option>
+          <option value="5">バリアフリー誘導基準</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 図面パネル -->
+    <div class="card diagram-card">
+      <h2>断面図（実寸比率）</h2>
+      <svg class="blueprint" viewBox="0 0 640 460" id="mainSvg">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 Z" fill="#6e7a6e"/>
+          </marker>
+          <pattern id="gridPattern" width="24" height="24" patternUnits="userSpaceOnUse">
+            <path d="M24 0 L0 0 0 24" class="grid-pattern-line"/>
+          </pattern>
+        </defs>
+        <rect x="0" y="0" width="640" height="460" fill="url(#gridPattern)"/>
+        <g id="drawGroup"></g>
+      </svg>
+
+      <div class="stats" id="statsBox"></div>
+
+      <div class="mini-row">
+        <div class="mini-svg-box">
+          <svg viewBox="0 0 200 200" id="miniSvg" style="width:100%;height:auto;display:block;">
+            <g id="miniGroup"></g>
+          </svg>
+        </div>
+        <div>
+          <div style="font-size:13px;color:var(--text-sub);margin-bottom:8px;">一段の断面（勾配確認）</div>
+          <div id="hinkakuBadgeBox"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 適合判定テーブル -->
+  <div class="card" style="margin-top:18px;">
+    <h2>建築基準法・バリアフリー基準との照合</h2>
+    <table>
+      <thead>
+        <tr><th>階段の種別</th><th>幅(mm)</th><th>蹴上(mm)</th><th>踏面(mm)</th><th>判定</th></tr>
+      </thead>
+      <tbody id="complianceBody"></tbody>
+    </table>
+  </div>
+
+  <!-- 参考：名作住宅 -->
+  <div class="card" style="margin-top:18px;">
+    <h2>参考：名作住宅の階段寸法</h2>
+    <table class="ref-table">
+      <thead><tr><th>作品名</th><th>設計</th><th>蹴上(mm)</th><th>踏面(mm)</th><th>2R+T(mm)</th></tr></thead>
+      <tbody>
+        <tr><td class="name">住吉の長屋</td><td>安藤忠雄</td><td>206.7</td><td>230.0</td><td>643.4</td></tr>
+        <tr><td class="name">サヴォア邸</td><td>ル・コルビュジエ</td><td>179.3</td><td>304.8</td><td>663.4</td></tr>
+        <tr><td class="name">マイレア邸</td><td>アルヴァ・アアルト</td><td>160.0</td><td>290.0</td><td>610.0</td></tr>
+        <tr><td class="name">軽井沢の山荘</td><td>吉村順三</td><td>210.0</td><td>210.0</td><td>630.0</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer>
+    ※本ツールは計画検討用の参考値を示すものです。実際の設計・施工にあたっては建築士等の専門家にご確認ください。基準値は建築基準法施行令第23条・住宅性能表示基準・バリアフリー法誘導基準を参照しています。
+  </footer>
+</div>
+
+<script>
+/* ===================================================================
+   階段寸法プランナー ロジック
+   ・入力(階高/踏面/目安蹴上/幅/用途)から段数と実際の蹴上を計算
+   ・断面図(SVG)をその場で描き直す
+   ・建築基準法などの基準表と照合して判定する
+   =================================================================== */
+
+// 建築基準法施行令第23条 + バリアフリー誘導基準の一覧
+const CATEGORIES = [
+  { name:"小学校の児童用",                              widthMin:1400, riseMax:160, treadMin:260 },
+  { name:"中学・高校生徒用／劇場等／物販1500㎡超",        widthMin:1400, riseMax:180, treadMin:260 },
+  { name:"200㎡超の居室階／地階等100㎡超",                widthMin:1200, riseMax:200, treadMin:240 },
+  { name:"上記以外・住宅以外",                           widthMin:750,  riseMax:220, treadMin:210 },
+  { name:"住宅（共同住宅の共用階段を除く）",              widthMin:750,  riseMax:230, treadMin:150 },
+  { name:"バリアフリー誘導基準",                         widthMin:1400, riseMax:160, treadMin:300 },
+];
+
+// 入力欄の取得
+const el = id => document.getElementById(id);
+const heightN = el("in-height-n"), heightR = el("in-height-r");
+const treadN  = el("in-tread-n"),  treadR  = el("in-tread-r");
+const riserN  = el("in-riser-n"),  riserR  = el("in-riser-r");
+const widthN  = el("in-width-n"),  widthR  = el("in-width-r");
+const categorySelect = el("in-category");
+
+// number欄とrange欄を同期させる小さなヘルパー
+function linkPair(numberEl, rangeEl, displayId, onChange){
+  const display = el(displayId);
+  function sync(fromRange){
+    if(fromRange){ numberEl.value = rangeEl.value; }
+    else{ rangeEl.value = numberEl.value; }
+    display.textContent = Number(numberEl.value).toLocaleString();
+    onChange();
+  }
+  numberEl.addEventListener("input", ()=>sync(false));
+  rangeEl.addEventListener("input", ()=>sync(true));
+}
+
+linkPair(heightN, heightR, "v-height", ()=>update());
+linkPair(treadN,  treadR,  "v-tread",  ()=>update());
+linkPair(riserN,  riserR,  "v-riser",  ()=>update());
+linkPair(widthN,  widthR,  "v-width",  ()=>update());
+
+// 用途区分を変更したら、幅の初期値をその区分の最低幅に合わせる
+categorySelect.addEventListener("change", ()=>{
+  const cat = CATEGORIES[Number(categorySelect.value)];
+  widthN.value = cat.widthMin;
+  widthR.value = cat.widthMin;
+  el("v-width").textContent = cat.widthMin.toLocaleString();
+  update();
+});
+
+const NS = "http://www.w3.org/2000/svg";
+function svgEl(tag, attrs){
+  const e = document.createElementNS(NS, tag);
+  for(const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+
+function update(){
+  const floorHeight = parseFloat(heightN.value);
+  const tread       = parseFloat(treadN.value);
+  const targetRiser = parseFloat(riserN.value);
+  const width       = parseFloat(widthN.value);
+  const catIndex    = Number(categorySelect.value);
+
+  if(!floorHeight || !tread || !targetRiser || floorHeight<=0 || tread<=0 || targetRiser<=0) return;
+
+  // 段数は目安の蹴上に最も近い整数段に丸め、実際の蹴上を再計算(階高にきっちり収める)
+  let steps = Math.round(floorHeight / targetRiser);
+  if(steps < 1) steps = 1;
+  const actualRiser = floorHeight / steps;
+  const treadCount = Math.max(steps - 1, 0); // 最上段は踊り場(床)に接続するため踏面は段数-1
+  const run = treadCount * tread;
+
+  const slopeRatio = actualRiser / tread;
+  const angleDeg = Math.atan(actualRiser / tread) * 180 / Math.PI;
+  const sumRT = 2 * actualRiser + tread;
+
+  // 品確法 等級5 の基準： 勾配 6/7以下 かつ 2R+T が 550〜650mm
+  const hinkakuOK = slopeRatio <= (6/7) && sumRT >= 550 && sumRT <= 650;
+
+  renderStats({steps, actualRiser, tread, run, slopeRatio, angleDeg, sumRT, hinkakuOK});
+  renderCompliance({actualRiser, tread, width, catIndex});
+  drawMainDiagram({floorHeight, run, steps, tread, actualRiser});
+  drawMiniTriangle({tread, actualRiser, angleDeg});
+}
+
+function renderStats(d){
+  const box = el("statsBox");
+  box.innerHTML = "";
+  const items = [
+    ["蹴上段数", `${d.steps} <small>段</small>`],
+    ["踏面段数", `${Math.max(d.steps-1,0)} <small>段</small>`],
+    ["実際の蹴上", `${d.actualRiser.toFixed(1)} <small>mm</small>`],
+    ["踏面", `${d.tread.toFixed(0)} <small>mm</small>`],
+    ["水平距離(全長)", `${d.run.toFixed(0)} <small>mm</small>`],
+    ["勾配(蹴上/踏面)", `${d.slopeRatio.toFixed(3)}`],
+    ["角度", `${d.angleDeg.toFixed(1)} <small>°</small>`],
+    ["2R+T", `${d.sumRT.toFixed(1)} <small>mm</small>`],
+  ];
+  for(const [label, value] of items){
+    const c = document.createElement("div");
+    c.className = "stat";
+    c.innerHTML = `<div class="label">${label}</div><div class="value">${value}</div>`;
+    box.appendChild(c);
+  }
+
+  const badgeBox = el("hinkakuBadgeBox");
+  badgeBox.innerHTML = d.hinkakuOK
+    ? `<span class="badge ok">品確法 等級5 ◎ 適合</span>`
+    : `<span class="badge ng">品確法 等級5 × 不適合</span>`;
+}
+
+function renderCompliance(d){
+  const body = el("complianceBody");
+  body.innerHTML = "";
+  CATEGORIES.forEach((cat, i)=>{
+    const widthOK = d.width >= cat.widthMin;
+    const riseOK  = d.actualRiser <= cat.riseMax;
+    const treadOK = d.tread >= cat.treadMin;
+    const allOK = widthOK && riseOK && treadOK;
+
+    const tr = document.createElement("tr");
+    if(i === d.catIndex) tr.className = "selected";
+    tr.innerHTML = `
+      <td class="name">${cat.name}</td>
+      <td>${cat.widthMin}以上 <span class="${widthOK?'mark-ok':'mark-ng'}">${widthOK?'○':'×'}</span></td>
+      <td>${cat.riseMax}以下 <span class="${riseOK?'mark-ok':'mark-ng'}">${riseOK?'○':'×'}</span></td>
+      <td>${cat.treadMin}以上 <span class="${treadOK?'mark-ok':'mark-ng'}">${treadOK?'○':'×'}</span></td>
+      <td>${allOK ? '<span class="mark-ok">適合</span>' : '<span class="mark-ng">不適合</span>'}</td>
+    `;
+    body.appendChild(tr);
+  });
+}
+
+function drawMainDiagram(d){
+  const group = el("drawGroup");
+  group.innerHTML = "";
+
+  const marginLeft=100, marginRight=40, marginTop=40, marginBottom=90;
+  const drawableW = 640 - marginLeft - marginRight;
+  const drawableH = 460 - marginTop - marginBottom;
+
+  const scale = Math.min(drawableW/d.run, drawableH/d.floorHeight);
+  const offsetX = marginLeft, offsetY = marginTop;
+  const scaledW = d.run*scale, scaledH = d.floorHeight*scale;
+
+  // 階段の断面(ジグザグ)の座標(mm)を作る
+  let x=0, y=d.floorHeight;
+  const pts = [[x,y]];
+  for(let i=0;i<d.steps;i++){
+    y -= d.actualRiser;
+    pts.push([x,y]);
+    if(i < d.steps-1){
+      x += d.tread;
+      pts.push([x,y]);
+    }
+  }
+  const toSvg = p => [offsetX+p[0]*scale, offsetY+p[1]*scale];
+  const svgPts = pts.map(toSvg);
+
+  // 塗りつぶし(階段の断面マス)
+  const fillPts = [...svgPts, [offsetX+scaledW, offsetY+scaledH], [offsetX, offsetY+scaledH]];
+  group.appendChild(svgEl("polygon", {
+    points: fillPts.map(p=>p.join(",")).join(" "),
+    class: "stair-fill"
+  }));
+
+  // 段の輪郭線
+  group.appendChild(svgEl("polyline", {
+    points: svgPts.map(p=>p.join(",")).join(" "),
+    class: "stair-line"
+  }));
+
+  // 上下の床ライン + ハッチング
+  [offsetY, offsetY+scaledH].forEach(y0=>{
+    group.appendChild(svgEl("line", {x1:offsetX-20, y1:y0, x2:offsetX+scaledW+20, y2:y0, class:"floor-line"}));
+    for(let hx=offsetX-15; hx<offsetX+scaledW+15; hx+=14){
+      group.appendChild(svgEl("line", {x1:hx, y1:y0, x2:hx-7, y2:y0+9, class:"hatch"}));
+    }
+  });
+
+  // 高さの寸法線
+  const hx = offsetX-30;
+  group.appendChild(svgEl("line",{x1:offsetX-8,y1:offsetY,x2:hx,y2:offsetY,class:"dim-ext"}));
+  group.appendChild(svgEl("line",{x1:offsetX-8,y1:offsetY+scaledH,x2:hx,y2:offsetY+scaledH,class:"dim-ext"}));
+  group.appendChild(svgEl("line",{x1:hx,y1:offsetY,x2:hx,y2:offsetY+scaledH,class:"dim-line","marker-start":"url(#arrow)","marker-end":"url(#arrow)"}));
+  const hLabel = svgEl("text",{x:hx-14,y:offsetY+scaledH/2, class:"dim-text","text-anchor":"middle", transform:`rotate(-90 ${hx-14} ${offsetY+scaledH/2})`});
+  hLabel.textContent = `${Math.round(d.floorHeight)} mm`;
+  group.appendChild(hLabel);
+
+  // 全長の寸法線
+  const ry = offsetY+scaledH+30;
+  group.appendChild(svgEl("line",{x1:offsetX,y1:offsetY+scaledH+8,x2:offsetX,y2:ry,class:"dim-ext"}));
+  group.appendChild(svgEl("line",{x1:offsetX+scaledW,y1:offsetY+scaledH+8,x2:offsetX+scaledW,y2:ry,class:"dim-ext"}));
+  group.appendChild(svgEl("line",{x1:offsetX,y1:ry,x2:offsetX+scaledW,y2:ry,class:"dim-line","marker-start":"url(#arrow)","marker-end":"url(#arrow)"}));
+  const rLabel = svgEl("text",{x:offsetX+scaledW/2, y:ry+18, class:"dim-text", "text-anchor":"middle"});
+  rLabel.textContent = `${Math.round(d.run)} mm`;
+  group.appendChild(rLabel);
+}
+
+function drawMiniTriangle(d){
+  const group = el("miniGroup");
+  group.innerHTML = "";
+
+  const avail = 120;
+  const scale2 = Math.min(avail/d.tread, avail/d.actualRiser);
+  const A = [40, 160];
+  const B = [40 + d.tread*scale2, 160];
+  const C = [40 + d.tread*scale2, 160 - d.actualRiser*scale2];
+
+  // 三角形(踏面=底辺, 蹴上=高さ, 斜辺=勾配)
+  group.appendChild(svgEl("line",{x1:A[0],y1:A[1],x2:B[0],y2:B[1],class:"leg-line"}));
+  group.appendChild(svgEl("line",{x1:B[0],y1:B[1],x2:C[0],y2:C[1],class:"leg-line"}));
+  group.appendChild(svgEl("line",{x1:A[0],y1:A[1],x2:C[0],y2:C[1],class:"slope-line"}));
+
+  // 直角マーク
+  group.appendChild(svgEl("polyline",{points:`${B[0]-8},${B[1]} ${B[0]-8},${B[1]-8} ${B[0]},${B[1]-8}`, class:"right-angle"}));
+
+  // 角度の弧
+  const r = 24;
+  const dx = C[0]-A[0], dy = C[1]-A[1];
+  const hyp = Math.hypot(dx,dy);
+  const ux = dx/hyp, uy = dy/hyp;
+  const P1 = [A[0]+r, A[1]];
+  const P2 = [A[0]+r*ux, A[1]+r*uy];
+  group.appendChild(svgEl("path",{d:`M ${P1[0]} ${P1[1]} A ${r} ${r} 0 0 0 ${P2[0]} ${P2[1]}`, class:"arc-line"}));
+
+  const bisX = (1+ux), bisY = (0+uy);
+  const bisLen = Math.hypot(bisX,bisY);
+  const labelPos = [A[0]+(r+16)*bisX/bisLen, A[1]+(r+16)*bisY/bisLen];
+  const angleLabel = svgEl("text",{x:labelPos[0],y:labelPos[1], class:"dim-text","text-anchor":"middle"});
+  angleLabel.setAttribute("fill","#a8703f");
+  angleLabel.textContent = `${d.angleDeg.toFixed(1)}°`;
+  group.appendChild(angleLabel);
+
+  // 寸法ラベル
+  const treadLabel = svgEl("text",{x:(A[0]+B[0])/2, y:A[1]+16, class:"dim-text","text-anchor":"middle"});
+  treadLabel.textContent = `踏面 ${d.tread.toFixed(0)}`;
+  group.appendChild(treadLabel);
+
+  const riserLabel = svgEl("text",{x:B[0]+8, y:(B[1]+C[1])/2, class:"dim-text"});
+  riserLabel.textContent = `蹴上 ${d.actualRiser.toFixed(1)}`;
+  group.appendChild(riserLabel);
+}
+
+// 初期表示
+update();
+</script>
+</body>
+</html>
